@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee List - Attendance System</title>
+    <link rel="stylesheet" href="attd_emplist.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script type="module" src="attd_emplist.js"></script>
+</head>
+<body>
+    <!-- PIN Modal -->
+    <div class="pin-modal" id="pinModal">
+        <div class="pin-content">
+            <div class="pin-header">
+                <h3>Enter Security PIN</h3>
+                <span class="close-pin" id="closePin">&times;</span>
+            </div>
+            <div class="pin-body">
+                <p>Please enter your 4-digit PIN for <span id="employeeName"></span></p>
+                <div class="pin-display">
+                    <span class="pin-dot" id="pinDot1"></span>
+                    <span class="pin-dot" id="pinDot2"></span>
+                    <span class="pin-dot" id="pinDot3"></span>
+                    <span class="pin-dot" id="pinDot4"></span>
+                </div>
+                <div class="pin-error" id="pinError"></div>
+            </div>
+            <div class="pin-footer">
+                <div class="pin-numpad">
+                    <button class="pin-btn" data-value="1">1</button>
+                    <button class="pin-btn" data-value="2">2</button>
+                    <button class="pin-btn" data-value="3">3</button>
+                    <button class="pin-btn" data-value="4">4</button>
+                    <button class="pin-btn" data-value="5">5</button>
+                    <button class="pin-btn" data-value="6">6</button>
+                    <button class="pin-btn" data-value="7">7</button>
+                    <button class="pin-btn" data-value="8">8</button>
+                    <button class="pin-btn" data-value="9">9</button>
+                    <button class="pin-btn pin-clear" id="pinClear">C</button>
+                    <button class="pin-btn" data-value="0">0</button>
+                    <button class="pin-btn pin-submit" id="pinSubmit">✓</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header-nav">
+            <div class="logo-container">
+                <img src="ravi_logo.png" alt="RAVI Logo" class="logo">
+            </div>
+            <button class="back-btn" id="backButton">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+        </div>
+
+        <div class="header">
+            <h1>Employee Attendance</h1>
+            <p id="attendanceTypeDisplay">Select an employee to mark attendance</p>
+        </div>
+        
+        <div class="datetime-container">
+            <div id="datetime">Loading date and time...</div>
+        </div>
+
+        <div class="search-container">
+            <div class="search-box">
+                <i class="fas fa-search"></i>
+                <input type="text" id="searchInput" placeholder="Search employees...">
+            </div>
+        </div>
+        
+        <div class="employees-container" id="employeesContainer">
+            <!-- Employee cards will be inserted here by JavaScript -->
+        </div>
+        
+        <div class="notification" id="notification">
+            <span id="notification-text"></span>
+        </div>
+    </div>
+</body>
+</html>

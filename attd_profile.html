@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Employee Attendance Profile</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="attd_profile.css">
+</head>
+<body>
+    <div class="loading-screen" id="loadingScreen">
+        <div class="loading-content">
+            <div class="loading-spinner"></div>
+            <div class="loading-text">Loading Profile...</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="header-nav">
+            <div class="logo-container">
+                <h1>ATTENDANCE PROFILE</h1>
+            </div>
+            <button class="back-btn" id="backButton">
+                <i class="fas fa-arrow-left"></i> Back
+            </button>
+        </div>
+
+        <div class="profile-container">
+            <div class="profile-header">
+                <div class="employee-avatar" id="employeeAvatar"></div>
+                <div class="employee-info">
+                    <h2 id="employeeName">Employee Name</h2>
+                    <p>ID: <span id="employeeId">---</span></p>
+                </div>
+            </div>
+
+            <div class="datetime-container">
+                <div id="datetime">Loading date and time...</div>
+            </div>
+
+            <div class="attendance-actions">
+                <div class="action-card">
+                    <h3>Regular Time</h3>
+                    <div class="camera-section">
+                        <div class="camera-preview" id="cameraPreview">
+                            <i class="fas fa-camera"></i>
+                            <p>Capture image to enable time tracking</p>
+                        </div>
+                        <button class="camera-btn" id="captureBtn">
+                            <i class="fas fa-camera"></i> Capture Image
+                        </button>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="action-btn time-in" id="timeInBtn" disabled>
+                            <i class="fas fa-fingerprint"></i> Time In
+                        </button>
+                        <button class="action-btn time-out" id="timeOutBtn" disabled>
+                            <i class="fas fa-fingerprint"></i> Time Out
+                        </button>
+                    </div>
+                </div>
+
+                <div class="action-card overtime-card" id="overtimeSection">
+                    <h3>Overtime</h3>
+                    <p class="overtime-notice" id="overtimeNotice">Overtime options will appear after 9 hours of work</p>
+                    <div class="action-buttons overtime-buttons">
+                        <button class="action-btn overtime-in" id="overtimeInBtn" disabled>
+                            <i class="fas fa-moon"></i> OT Time In
+                        </button>
+                        <button class="action-btn overtime-out" id="overtimeOutBtn" disabled>
+                            <i class="fas fa-moon"></i> OT Time Out
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="attendance-history">
+                <h3>Today's Attendance Record</h3>
+                <div class="history-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Type</th>
+                                <th>Time</th>
+                                <th>Attendance Type</th>
+                            </tr>
+                        </thead>
+                        <tbody id="attendanceRecords">
+                            <tr>
+                                <td colspan="3" class="no-records">No attendance records for today</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Camera Modal -->
+    <div class="camera-modal" id="cameraModal">
+        <div class="camera-content">
+            <div class="camera-header">
+                <h3>Capture Attendance Image</h3>
+                <span class="close-camera" id="closeCamera">&times;</span>
+            </div>
+            <div class="camera-body">
+                <video id="video" autoplay playsinline></video>
+                <canvas id="canvas" style="display:none;"></canvas>
+                <button class="capture-btn" id="takePictureBtn">
+                    <i class="fas fa-camera"></i> Take Picture
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Notification -->
+    <div class="notification" id="notification">
+        <div class="notification-content">
+            <span id="notification-text"></span>
+        </div>
+    </div>
+
+    <script type="module" src="attd_profile.js"></script>
+</body>
+</html>

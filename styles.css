@@ -1,0 +1,78 @@
+body {
+  margin: 0;
+  padding: 0;
+  background-color: #000;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  color: #FFD700;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+}
+
+.vault-container {
+  text-align: center;
+  background-color: #111;
+  padding: 40px;
+  border: 2px solid #FFD700;
+  border-radius: 15px;
+  box-shadow: 0 0 20px #FFD70088;
+}
+
+h1 {
+  color: #FFD700;
+  margin-bottom: 30px;
+}
+
+input[type="password"] {
+  padding: 10px;
+  font-size: 1rem;
+  border: none;
+  border-radius: 5px;
+  width: 80%;
+  margin-bottom: 20px;
+  outline: none;
+}
+
+button {
+  padding: 10px 20px;
+  background-color: #FFD700;
+  color: #000;
+  font-weight: bold;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+button:hover {
+  background-color: #e6c200;
+}
+
+.message {
+  margin-top: 20px;
+  font-size: 1rem;
+}
+
+.unlocked {
+  color: #00ff00;
+}
+
+.locked {
+  color: #ff0000;
+}
+
+.shake {
+  animation: shake 0.5s;
+}
+
+@keyframes shake {
+  0% { transform: translateX(0); }
+  20% { transform: translateX(-5px); }
+  40% { transform: translateX(5px); }
+  60% { transform: translateX(-5px); }
+  80% { transform: translateX(5px); }
+  100% { transform: translateX(0); }
+}
+
+
