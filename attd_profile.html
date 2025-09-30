@@ -51,6 +51,10 @@
   <i class="fas fa-map-marker-alt"></i>
   <span id="locationStatus">Initializing location...</span>
 </div>
+<!-- Add this button near your location status element -->
+<button id="locationRetryBtn" class="location-retry-btn" style="display: none;">
+  <i class="fas fa-sync-alt"></i> Retry Location Access
+</button>
                         <button class="camera-btn" id="captureBtn">
                             <i class="fas fa-camera"></i> Capture Image
                         </button>
@@ -88,6 +92,7 @@
                                 <th>Type</th>
                                 <th>Time</th>
                                 <th>Attendance Type</th>
+                                <th>Location</th>
                             </tr>
                         </thead>
                         <tbody id="attendanceRecords">

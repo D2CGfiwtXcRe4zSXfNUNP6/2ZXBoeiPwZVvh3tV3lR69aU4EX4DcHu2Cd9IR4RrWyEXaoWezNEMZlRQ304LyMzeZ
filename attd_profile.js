@@ -24,7 +24,8 @@ const attendanceRecords = document.getElementById('attendanceRecords');
 const notification = document.getElementById('notification');
 const notificationText = document.getElementById('notification-text');
 const loadingScreen = document.getElementById('loadingScreen');
-const locationStatus = document.getElementById('locationStatus'); // Make sure this exists in HTML
+const locationStatus = document.getElementById('locationStatus');
+const locationRetryBtn = document.getElementById('locationRetryBtn'); // Add this button to your HTML
 
 // Global variables
 let currentEmployee = null;
@@ -34,6 +35,7 @@ let stream = null;
 let attendanceData = {};
 let currentLocation = null;
 let watchId = null;
+let locationPermissionDenied = false;
 
 // ========== INIT ==========
 document.addEventListener('DOMContentLoaded', function() {
@@ -106,6 +108,191 @@ function setupEventListeners() {
   timeOutBtn.addEventListener('click', () => recordAttendance('TimeOut'));
   overtimeInBtn.addEventListener('click', () => recordAttendance('Overtime-TimeIn'));
   overtimeOutBtn.addEventListener('click', () => recordAttendance('Overtime-TimeOut'));
+
+  // Add location retry button listener
+  if (locationRetryBtn) {
+    locationRetryBtn.addEventListener('click', retryLocationAccess);
+    locationRetryBtn.style.display = 'none'; // Hide initially
+  }
+}
+
+// ========== LOCATION RETRY FUNCTION ==========
+function retryLocationAccess() {
+  console.log('Retrying location access...');
+  
+  if (locationRetryBtn) {
+    locationRetryBtn.style.display = 'none';
+    locationRetryBtn.textContent = 'Retry Location';
+    locationRetryBtn.disabled = false;
+  }
+  
+  if (locationStatus) {
+    locationStatus.textContent = "Requesting location access...";
+    locationStatus.style.color = "#ff9800";
+  }
+  
+  showNotification("Requesting location access...", "info");
+  
+  // Stop any existing location tracking
+  stopLocationTracking();
+  
+  // Reinitialize location tracking
+  initializeLocationTracking();
+}
+
+// ========== LOCATION TRACKING ==========
+function initializeLocationTracking() {
+  if (!navigator.geolocation) {
+    console.log('Geolocation not supported');
+    if (locationStatus) {
+      locationStatus.textContent = "Geolocation is not supported by this browser.";
+      locationStatus.style.color = "#f44336";
+    }
+    return;
+  }
+
+  if (locationStatus) {
+    locationStatus.textContent = "Getting location...";
+    locationStatus.style.color = "#ff9800";
+  }
+
+  // Set timeout for location request
+  const locationTimeout = setTimeout(() => {
+    console.log('Location request timeout');
+    if (locationStatus) {
+      locationStatus.textContent = "Location timeout - using default location";
+      locationStatus.style.color = "#ff9800";
+    }
+    // Set a default location so the app doesn't get stuck
+    currentLocation = {
+      latitude: 0,
+      longitude: 0,
+      accuracy: 0,
+      timestamp: new Date().toISOString(),
+      address: "Location unavailable"
+    };
+  }, 10000); // 10 second timeout
+
+  // Get initial position
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      clearTimeout(locationTimeout);
+      locationPermissionDenied = false;
+      updateLocation(position);
+      
+      // Watch for position changes
+      watchId = navigator.geolocation.watchPosition(
+        updateLocation,
+        handleLocationError,
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 60000
+        }
+      );
+      
+      // Hide retry button on success
+      if (locationRetryBtn) {
+        locationRetryBtn.style.display = 'none';
+      }
+    },
+    (error) => {
+      clearTimeout(locationTimeout);
+      handleLocationError(error);
+      
+      // Set default location even on error so app continues working
+      currentLocation = {
+        latitude: 0,
+        longitude: 0,
+        accuracy: 0,
+        timestamp: new Date().toISOString(),
+        address: "Location access denied"
+      };
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
+
+function updateLocation(position) {
+  const { latitude, longitude, accuracy } = position.coords;
+  
+  currentLocation = {
+    latitude: latitude,
+    longitude: longitude,
+    accuracy: Math.round(accuracy),
+    timestamp: new Date().toISOString()
+  };
+
+  if (locationStatus) {
+    locationStatus.textContent = `Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (Accuracy: ${Math.round(accuracy)}m)`;
+    locationStatus.style.color = "#4CAF50";
+  }
+  
+  // Get address from coordinates (reverse geocoding)
+  getAddressFromCoordinates(latitude, longitude);
+}
+
+function handleLocationError(error) {
+  console.error("Location error: ", error);
+  
+  let errorMessage = "An unknown location error occurred.";
+  switch(error.code) {
+    case error.PERMISSION_DENIED:
+      errorMessage = "Location access denied. Please enable location permissions.";
+      locationPermissionDenied = true;
+      break;
+    case error.POSITION_UNAVAILABLE:
+      errorMessage = "Location information unavailable.";
+      break;
+    case error.TIMEOUT:
+      errorMessage = "Location request timed out.";
+      break;
+  }
+  
+  if (locationStatus) {
+    locationStatus.textContent = errorMessage;
+    locationStatus.style.color = "#f44336";
+  }
+  
+  // Show retry button if permission was denied
+  if (locationPermissionDenied && locationRetryBtn) {
+    locationRetryBtn.style.display = 'block';
+    locationRetryBtn.disabled = false;
+  }
+  
+  showNotification("Location services issue - attendance can still be recorded", "info");
+}
+
+function getAddressFromCoordinates(lat, lng) {
+  // Using OpenStreetMap Nominatim for reverse geocoding (free service)
+  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
+    .then(response => response.json())
+    .then(data => {
+      if (data && data.display_name) {
+        const address = data.display_name;
+        currentLocation.address = address;
+        
+        // Update location status with address
+        if (locationStatus) {
+          locationStatus.textContent = `Location: ${address.split(',').slice(0, 3).join(',')}`;
+        }
+      }
+    })
+    .catch(error => {
+      console.error("Reverse geocoding error: ", error);
+      // Continue without address - coordinates are sufficient
+    });
+}
+
+function stopLocationTracking() {
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
 }
 
 // ========== CAMERA ==========
@@ -154,146 +341,6 @@ function takePicture() {
   closeCameraModal();
   showNotification("Image captured successfully. You can now record attendance.");
   updateButtons();
-}
-
-// ========== LOCATION TRACKING ==========
-function initializeLocationTracking() {
-  if (!navigator.geolocation) {
-    console.log('Geolocation not supported');
-    if (locationStatus) {
-      locationStatus.textContent = "Geolocation is not supported by this browser.";
-      locationStatus.style.color = "#f44336";
-    }
-    return;
-  }
-
-  if (locationStatus) {
-    locationStatus.textContent = "Getting location...";
-    locationStatus.style.color = "#ff9800";
-  }
-
-  // Set timeout for location request
-  const locationTimeout = setTimeout(() => {
-    console.log('Location request timeout');
-    if (locationStatus) {
-      locationStatus.textContent = "Location timeout - using default location";
-      locationStatus.style.color = "#ff9800";
-    }
-    // Set a default location so the app doesn't get stuck
-    currentLocation = {
-      latitude: 0,
-      longitude: 0,
-      accuracy: 0,
-      timestamp: new Date().toISOString(),
-      address: "Location unavailable"
-    };
-  }, 10000); // 10 second timeout
-
-  // Get initial position
-  navigator.geolocation.getCurrentPosition(
-    (position) => {
-      clearTimeout(locationTimeout);
-      updateLocation(position);
-      // Watch for position changes
-      watchId = navigator.geolocation.watchPosition(
-        updateLocation,
-        handleLocationError,
-        {
-          enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 60000
-        }
-      );
-    },
-    (error) => {
-      clearTimeout(locationTimeout);
-      handleLocationError(error);
-      // Set default location even on error so app continues working
-      currentLocation = {
-        latitude: 0,
-        longitude: 0,
-        accuracy: 0,
-        timestamp: new Date().toISOString(),
-        address: "Location access denied"
-      };
-    },
-    {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0
-    }
-  );
-}
-
-function updateLocation(position) {
-  const { latitude, longitude, accuracy } = position.coords;
-  
-  currentLocation = {
-    latitude: latitude,
-    longitude: longitude,
-    accuracy: Math.round(accuracy),
-    timestamp: new Date().toISOString()
-  };
-
-  if (locationStatus) {
-    locationStatus.textContent = `Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (Accuracy: ${Math.round(accuracy)}m)`;
-    locationStatus.style.color = "#4CAF50";
-  }
-  
-  // Optional: Get address from coordinates (reverse geocoding)
-  getAddressFromCoordinates(latitude, longitude);
-}
-
-function handleLocationError(error) {
-  console.error("Location error: ", error);
-  
-  let errorMessage = "An unknown location error occurred.";
-  switch(error.code) {
-    case error.PERMISSION_DENIED:
-      errorMessage = "Location access denied. Please enable location permissions.";
-      break;
-    case error.POSITION_UNAVAILABLE:
-      errorMessage = "Location information unavailable.";
-      break;
-    case error.TIMEOUT:
-      errorMessage = "Location request timed out.";
-      break;
-  }
-  
-  if (locationStatus) {
-    locationStatus.textContent = errorMessage;
-    locationStatus.style.color = "#f44336";
-  }
-  
-  showNotification("Location services issue - attendance can still be recorded", "info");
-}
-
-function getAddressFromCoordinates(lat, lng) {
-  // Using OpenStreetMap Nominatim for reverse geocoding (free service)
-  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
-    .then(response => response.json())
-    .then(data => {
-      if (data && data.display_name) {
-        const address = data.display_name;
-        currentLocation.address = address;
-        
-        // Update location status with address
-        if (locationStatus) {
-          locationStatus.textContent = `Location: ${address.split(',').slice(0, 3).join(',')}`;
-        }
-      }
-    })
-    .catch(error => {
-      console.error("Reverse geocoding error: ", error);
-      // Continue without address - coordinates are sufficient
-    });
-}
-
-function stopLocationTracking() {
-  if (watchId) {
-    navigator.geolocation.clearWatch(watchId);
-    watchId = null;
-  }
 }
 
 // ========== ATTENDANCE ==========
@@ -433,22 +480,37 @@ function updateAttendanceRecords() {
 
   attendanceRecords.innerHTML = '';
   records.forEach(record => {
-    const locationInfo = record.location ? 
-      `${record.location.latitude.toFixed(4)}, ${record.location.longitude.toFixed(4)}` : 
-      'No location';
+    // UPDATED: Use address if available, otherwise coordinates, otherwise 'No location'
+    let locationInfo = 'No location';
+    
+    if (record.location) {
+      if (record.location.address && 
+          record.location.address !== "Location unavailable" && 
+          record.location.address !== "Location access denied" &&
+          record.location.address !== "Location initializing...") {
+        // Use the address from location
+        locationInfo = record.location.address;
+      } else if (record.location.latitude && record.location.longitude) {
+        // Fallback to coordinates if no address
+        locationInfo = `${record.location.latitude.toFixed(4)}, ${record.location.longitude.toFixed(4)}`;
+      }
+    }
+    
+    // Shorten the address for display if it's too long
+    const displayLocation = shortenAddress(locationInfo);
     
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${record.type}</td>
       <td>${record.time}</td>
       <td>${record.attendanceType || 'On-Site'}</td>
-      <td>${locationInfo}</td>
+      <td title="${locationInfo}">${displayLocation}</td>
       <td>
         <button class="view-image-btn" data-image="${record.image}">
           <i class="fas fa-eye"></i> View
         </button>
         ${record.location && record.location.latitude !== 0 ? 
-          `<button class="view-location-btn" data-lat="${record.location.latitude}" data-lng="${record.location.longitude}" data-address="${record.location.address || ''}">
+          `<button class="view-location-btn" data-lat="${record.location.latitude}" data-lng="${record.location.longitude}" data-address="${record.location.address || locationInfo}">
             <i class="fas fa-map-marker-alt"></i> Map
           </button>` : ''}
       </td>
@@ -472,6 +534,29 @@ function updateAttendanceRecords() {
       viewLocationOnMap(lat, lng, address);
     });
   });
+}
+
+// Helper function to shorten long addresses for display
+function shortenAddress(fullAddress) {
+  if (!fullAddress || fullAddress === 'No location') return fullAddress;
+  
+  // If it's coordinates, return as is
+  if (fullAddress.includes(',') && !isNaN(parseFloat(fullAddress.split(',')[0]))) {
+    return fullAddress;
+  }
+  
+  // If address is too long, shorten it
+  if (fullAddress.length > 35) {
+    const parts = fullAddress.split(',');
+    if (parts.length >= 2) {
+      // Take first two parts (usually street + city/area)
+      return parts.slice(0, 2).join(', ').substring(0, 40) + '...';
+    } else {
+      return fullAddress.substring(0, 40) + '...';
+    }
+  }
+  
+  return fullAddress;
 }
 
 // ========== VIEW LOCATION ON MAP ==========

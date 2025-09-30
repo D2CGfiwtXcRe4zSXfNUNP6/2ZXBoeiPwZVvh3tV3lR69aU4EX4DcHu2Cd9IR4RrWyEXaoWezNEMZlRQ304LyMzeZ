@@ -400,6 +400,28 @@ body {
   background: #1976D2;
 }
 
+.location-retry-btn {
+  background-color: #ff9800;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+  margin-top: 8px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.location-retry-btn:hover {
+  background-color: #f57c00;
+}
+
+.location-retry-btn:disabled {
+  background-color: #cccccc;
+  cursor: not-allowed;
+}
 /* Notification */
 .notification {
     position: fixed;
