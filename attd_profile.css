@@ -371,6 +371,35 @@ body {
     box-shadow: 0 5px 15px rgba(76, 175, 80, 0.3);
 }
 
+.location-status {
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 5px;
+  margin: 10px 0;
+  font-size: 14px;
+  border-left: 4px solid #4CAF50;
+}
+
+.location-status i {
+  margin-right: 8px;
+  color: #4CAF50;
+}
+
+.view-location-btn {
+  background: #2196F3;
+  color: white;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  margin-left: 5px;
+  font-size: 12px;
+}
+
+.view-location-btn:hover {
+  background: #1976D2;
+}
+
 /* Notification */
 .notification {
     position: fixed;

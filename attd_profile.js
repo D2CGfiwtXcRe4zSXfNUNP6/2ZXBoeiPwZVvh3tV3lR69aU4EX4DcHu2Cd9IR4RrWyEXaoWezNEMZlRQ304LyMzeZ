@@ -24,6 +24,7 @@ const attendanceRecords = document.getElementById('attendanceRecords');
 const notification = document.getElementById('notification');
 const notificationText = document.getElementById('notification-text');
 const loadingScreen = document.getElementById('loadingScreen');
+const locationStatus = document.getElementById('locationStatus'); // Make sure this exists in HTML
 
 // Global variables
 let currentEmployee = null;
@@ -31,22 +32,36 @@ let currentDate = '';
 let capturedImage = null;
 let stream = null;
 let attendanceData = {};
+let currentLocation = null;
+let watchId = null;
 
 // ========== INIT ==========
 document.addEventListener('DOMContentLoaded', function() {
+  console.log('DOM loaded');
   loadingScreen.classList.add('active');
 
   const storedData = localStorage.getItem('attendanceData');
   if (storedData) {
-    attendanceData = JSON.parse(storedData);
-    currentEmployee = {
-      id: attendanceData.employeeId,
-      name: attendanceData.employeeName
-    };
+    console.log('Found stored data');
+    try {
+      attendanceData = JSON.parse(storedData);
+      currentEmployee = {
+        id: attendanceData.employeeId,
+        name: attendanceData.employeeName
+      };
 
-    displayEmployeeInfo();
-    loadAttendanceRecords();
+      displayEmployeeInfo();
+      loadAttendanceRecords();
+    } catch (error) {
+      console.error('Error parsing stored data:', error);
+      showNotification("Invalid employee data. Redirecting...", "error");
+      setTimeout(() => {
+        window.location.href = 'attd_home.html';
+      }, 2000);
+      return;
+    }
   } else {
+    console.log('No stored data found');
     showNotification("No employee data found. Redirecting...", "error");
     setTimeout(() => {
       window.location.href = 'attd_home.html';
@@ -57,13 +72,16 @@ document.addEventListener('DOMContentLoaded', function() {
   setupEventListeners();
   updateDateTime();
   setInterval(updateDateTime, 1000);
+  
+  // Initialize location tracking with safe approach
+  initializeLocationTracking();
 
-  // Fallback: hide loading screen if Firebase takes too long
+  // Force hide loading screen after max 4 seconds as fallback
   setTimeout(() => {
+    console.log('Forcing loading screen hide');
     loadingScreen.classList.remove('active');
-  }, 3000);
-
-  updateButtons();
+    showNotification("System ready. Location may still be initializing.", "info");
+  }, 4000);
 });
 
 // ========== UI HELPERS ==========
@@ -130,7 +148,7 @@ function takePicture() {
 
   cameraPreview.innerHTML = `
     <img src="${capturedImage}" alt="Captured Image"
-         style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
+        style="width: 100%; height: 100%; object-fit: cover; border-radius: 10px;">
   `;
 
   closeCameraModal();
@@ -138,11 +156,164 @@ function takePicture() {
   updateButtons();
 }
 
+// ========== LOCATION TRACKING ==========
+function initializeLocationTracking() {
+  if (!navigator.geolocation) {
+    console.log('Geolocation not supported');
+    if (locationStatus) {
+      locationStatus.textContent = "Geolocation is not supported by this browser.";
+      locationStatus.style.color = "#f44336";
+    }
+    return;
+  }
+
+  if (locationStatus) {
+    locationStatus.textContent = "Getting location...";
+    locationStatus.style.color = "#ff9800";
+  }
+
+  // Set timeout for location request
+  const locationTimeout = setTimeout(() => {
+    console.log('Location request timeout');
+    if (locationStatus) {
+      locationStatus.textContent = "Location timeout - using default location";
+      locationStatus.style.color = "#ff9800";
+    }
+    // Set a default location so the app doesn't get stuck
+    currentLocation = {
+      latitude: 0,
+      longitude: 0,
+      accuracy: 0,
+      timestamp: new Date().toISOString(),
+      address: "Location unavailable"
+    };
+  }, 10000); // 10 second timeout
+
+  // Get initial position
+  navigator.geolocation.getCurrentPosition(
+    (position) => {
+      clearTimeout(locationTimeout);
+      updateLocation(position);
+      // Watch for position changes
+      watchId = navigator.geolocation.watchPosition(
+        updateLocation,
+        handleLocationError,
+        {
+          enableHighAccuracy: true,
+          timeout: 15000,
+          maximumAge: 60000
+        }
+      );
+    },
+    (error) => {
+      clearTimeout(locationTimeout);
+      handleLocationError(error);
+      // Set default location even on error so app continues working
+      currentLocation = {
+        latitude: 0,
+        longitude: 0,
+        accuracy: 0,
+        timestamp: new Date().toISOString(),
+        address: "Location access denied"
+      };
+    },
+    {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 0
+    }
+  );
+}
+
+function updateLocation(position) {
+  const { latitude, longitude, accuracy } = position.coords;
+  
+  currentLocation = {
+    latitude: latitude,
+    longitude: longitude,
+    accuracy: Math.round(accuracy),
+    timestamp: new Date().toISOString()
+  };
+
+  if (locationStatus) {
+    locationStatus.textContent = `Location: ${latitude.toFixed(6)}, ${longitude.toFixed(6)} (Accuracy: ${Math.round(accuracy)}m)`;
+    locationStatus.style.color = "#4CAF50";
+  }
+  
+  // Optional: Get address from coordinates (reverse geocoding)
+  getAddressFromCoordinates(latitude, longitude);
+}
+
+function handleLocationError(error) {
+  console.error("Location error: ", error);
+  
+  let errorMessage = "An unknown location error occurred.";
+  switch(error.code) {
+    case error.PERMISSION_DENIED:
+      errorMessage = "Location access denied. Please enable location permissions.";
+      break;
+    case error.POSITION_UNAVAILABLE:
+      errorMessage = "Location information unavailable.";
+      break;
+    case error.TIMEOUT:
+      errorMessage = "Location request timed out.";
+      break;
+  }
+  
+  if (locationStatus) {
+    locationStatus.textContent = errorMessage;
+    locationStatus.style.color = "#f44336";
+  }
+  
+  showNotification("Location services issue - attendance can still be recorded", "info");
+}
+
+function getAddressFromCoordinates(lat, lng) {
+  // Using OpenStreetMap Nominatim for reverse geocoding (free service)
+  fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
+    .then(response => response.json())
+    .then(data => {
+      if (data && data.display_name) {
+        const address = data.display_name;
+        currentLocation.address = address;
+        
+        // Update location status with address
+        if (locationStatus) {
+          locationStatus.textContent = `Location: ${address.split(',').slice(0, 3).join(',')}`;
+        }
+      }
+    })
+    .catch(error => {
+      console.error("Reverse geocoding error: ", error);
+      // Continue without address - coordinates are sufficient
+    });
+}
+
+function stopLocationTracking() {
+  if (watchId) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+}
+
 // ========== ATTENDANCE ==========
 function recordAttendance(type) {
   if (!capturedImage) {
     showNotification("Please capture an image first.", "error");
     return;
+  }
+
+  // Don't block attendance if location is not available
+  if (!currentLocation) {
+    showNotification("Location not available, recording attendance without location...", "info");
+    // Set default location so attendance can be recorded
+    currentLocation = {
+      latitude: 0,
+      longitude: 0,
+      accuracy: 0,
+      timestamp: new Date().toISOString(),
+      address: "Location unavailable"
+    };
   }
 
   updateButtons();
@@ -178,7 +349,8 @@ function recordAttendance(type) {
     timestamp,
     image: capturedImage,
     filename,
-    attendanceType: attendanceData.type // Add attendance type (WFH/On-Site)
+    attendanceType: attendanceData.type, // Add attendance type (WFH/On-Site)
+    location: currentLocation // Add location data
   };
 
   saveAttendanceToFirebase(attendanceRecord);
@@ -216,18 +388,35 @@ function loadAttendanceRecords() {
   const date = new Date().toLocaleDateString('en-US').replace(/\//g, '-');
   const attendanceRef = ref(database, `attendance/${currentEmployee.id}/${date}`);
 
+  console.log('Loading records from Firebase...');
+  
   onValue(attendanceRef, (snapshot) => {
+    console.log('Firebase data received:', snapshot.exists());
+    
     const records = [];
-    snapshot.forEach((childSnapshot) => {
-      records.push(childSnapshot.val());
-    });
+    if (snapshot.exists()) {
+      snapshot.forEach((childSnapshot) => {
+        records.push(childSnapshot.val());
+      });
+    }
 
     attendanceData.records = records;
     updateAttendanceRecords();
     updateButtons();
 
-    // ✅ remove loading screen once data is loaded
+    // ✅ Always remove loading screen once data is loaded (even if no records)
+    console.log('Removing loading screen - Firebase data loaded');
     loadingScreen.classList.remove('active');
+  }, (error) => {
+    console.error('Firebase error:', error);
+    // ✅ Remove loading screen even on error
+    loadingScreen.classList.remove('active');
+    showNotification("Error loading attendance records", "error");
+    
+    // Initialize empty records if Firebase fails
+    attendanceData.records = [];
+    updateAttendanceRecords();
+    updateButtons();
   });
 }
 
@@ -236,7 +425,7 @@ function updateAttendanceRecords() {
   if (records.length === 0) {
     attendanceRecords.innerHTML = `
       <tr>
-        <td colspan="4" class="no-records">No attendance records for today</td>
+        <td colspan="5" class="no-records">No attendance records for today</td>
       </tr>
     `;
     return;
@@ -244,26 +433,78 @@ function updateAttendanceRecords() {
 
   attendanceRecords.innerHTML = '';
   records.forEach(record => {
+    const locationInfo = record.location ? 
+      `${record.location.latitude.toFixed(4)}, ${record.location.longitude.toFixed(4)}` : 
+      'No location';
+    
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${record.type}</td>
       <td>${record.time}</td>
       <td>${record.attendanceType || 'On-Site'}</td>
+      <td>${locationInfo}</td>
       <td>
         <button class="view-image-btn" data-image="${record.image}">
           <i class="fas fa-eye"></i> View
         </button>
+        ${record.location && record.location.latitude !== 0 ? 
+          `<button class="view-location-btn" data-lat="${record.location.latitude}" data-lng="${record.location.longitude}" data-address="${record.location.address || ''}">
+            <i class="fas fa-map-marker-alt"></i> Map
+          </button>` : ''}
       </td>
     `;
     attendanceRecords.appendChild(row);
   });
 
+  // Add event listeners for view buttons
   document.querySelectorAll('.view-image-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const imageData = e.currentTarget.dataset.image;
       viewImage(imageData);
     });
   });
+
+  document.querySelectorAll('.view-location-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      const lat = parseFloat(e.currentTarget.dataset.lat);
+      const lng = parseFloat(e.currentTarget.dataset.lng);
+      const address = e.currentTarget.dataset.address;
+      viewLocationOnMap(lat, lng, address);
+    });
+  });
+}
+
+// ========== VIEW LOCATION ON MAP ==========
+function viewLocationOnMap(lat, lng, address) {
+  const mapUrl = `https://www.google.com/maps?q=${lat},${lng}&z=17`;
+  const mapWindow = window.open('', '_blank');
+  
+  mapWindow.document.write(`
+    <html>
+      <head>
+        <title>Attendance Location</title>
+        <style>
+          body { margin: 0; font-family: Arial, sans-serif; }
+          .header { background: #f5f5f5; padding: 10px; border-bottom: 1px solid #ddd; }
+          .map-container { width: 100%; height: calc(100vh - 60px); }
+          iframe { width: 100%; height: 100%; border: none; }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <strong>Attendance Location</strong><br>
+          ${address ? `Address: ${address}<br>` : ''}
+          Coordinates: ${lat.toFixed(6)}, ${lng.toFixed(6)}
+        </div>
+        <div class="map-container">
+          <iframe 
+            src="https://maps.google.com/maps?q=${lat},${lng}&z=17&output=embed"
+            allowfullscreen>
+          </iframe>
+        </div>
+      </body>
+    </html>
+  `);
 }
 
 // ========== BUTTON STATES & OT ==========
@@ -358,9 +599,22 @@ function updateDateTime() {
 // ========== NOTIFICATION ==========
 function showNotification(message, type = 'success') {
   notificationText.textContent = message;
-  notification.style.backgroundColor = (type === 'error') ? '#f44336' : '#4CAF50';
+  
+  // Set different colors based on type
+  if (type === 'error') {
+    notification.style.backgroundColor = '#f44336';
+  } else if (type === 'info') {
+    notification.style.backgroundColor = '#2196F3';
+  } else {
+    notification.style.backgroundColor = '#4CAF50';
+  }
+  
   notification.classList.add('show');
   setTimeout(() => {
     notification.classList.remove('show');
   }, 3000);
 }
+
+// ========== CLEANUP ==========
+// Stop location tracking when leaving the page
+window.addEventListener('beforeunload', stopLocationTracking);
