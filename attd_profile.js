@@ -25,7 +25,7 @@ const notification = document.getElementById('notification');
 const notificationText = document.getElementById('notification-text');
 const loadingScreen = document.getElementById('loadingScreen');
 const locationStatus = document.getElementById('locationStatus');
-const locationRetryBtn = document.getElementById('locationRetryBtn'); // Add this button to your HTML
+const locationRetryBtn = document.getElementById('locationRetryBtn');
 
 // Global variables
 let currentEmployee = null;
@@ -75,10 +75,8 @@ document.addEventListener('DOMContentLoaded', function() {
   updateDateTime();
   setInterval(updateDateTime, 1000);
   
-  // Initialize location tracking with safe approach
   initializeLocationTracking();
 
-  // Force hide loading screen after max 4 seconds as fallback
   setTimeout(() => {
     console.log('Forcing loading screen hide');
     loadingScreen.classList.remove('active');
@@ -109,10 +107,9 @@ function setupEventListeners() {
   overtimeInBtn.addEventListener('click', () => recordAttendance('Overtime-TimeIn'));
   overtimeOutBtn.addEventListener('click', () => recordAttendance('Overtime-TimeOut'));
 
-  // Add location retry button listener
   if (locationRetryBtn) {
     locationRetryBtn.addEventListener('click', retryLocationAccess);
-    locationRetryBtn.style.display = 'none'; // Hide initially
+    locationRetryBtn.style.display = 'none';
   }
 }
 
@@ -133,10 +130,7 @@ function retryLocationAccess() {
   
   showNotification("Requesting location access...", "info");
   
-  // Stop any existing location tracking
   stopLocationTracking();
-  
-  // Reinitialize location tracking
   initializeLocationTracking();
 }
 
@@ -156,14 +150,12 @@ function initializeLocationTracking() {
     locationStatus.style.color = "#ff9800";
   }
 
-  // Set timeout for location request
   const locationTimeout = setTimeout(() => {
     console.log('Location request timeout');
     if (locationStatus) {
       locationStatus.textContent = "Location timeout - using default location";
       locationStatus.style.color = "#ff9800";
     }
-    // Set a default location so the app doesn't get stuck
     currentLocation = {
       latitude: 0,
       longitude: 0,
@@ -171,16 +163,14 @@ function initializeLocationTracking() {
       timestamp: new Date().toISOString(),
       address: "Location unavailable"
     };
-  }, 10000); // 10 second timeout
+  }, 10000);
 
-  // Get initial position
   navigator.geolocation.getCurrentPosition(
     (position) => {
       clearTimeout(locationTimeout);
       locationPermissionDenied = false;
       updateLocation(position);
       
-      // Watch for position changes
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleLocationError,
@@ -191,7 +181,6 @@ function initializeLocationTracking() {
         }
       );
       
-      // Hide retry button on success
       if (locationRetryBtn) {
         locationRetryBtn.style.display = 'none';
       }
@@ -200,7 +189,6 @@ function initializeLocationTracking() {
       clearTimeout(locationTimeout);
       handleLocationError(error);
       
-      // Set default location even on error so app continues working
       currentLocation = {
         latitude: 0,
         longitude: 0,
@@ -232,7 +220,6 @@ function updateLocation(position) {
     locationStatus.style.color = "#4CAF50";
   }
   
-  // Get address from coordinates (reverse geocoding)
   getAddressFromCoordinates(latitude, longitude);
 }
 
@@ -258,7 +245,6 @@ function handleLocationError(error) {
     locationStatus.style.color = "#f44336";
   }
   
-  // Show retry button if permission was denied
   if (locationPermissionDenied && locationRetryBtn) {
     locationRetryBtn.style.display = 'block';
     locationRetryBtn.disabled = false;
@@ -268,7 +254,6 @@ function handleLocationError(error) {
 }
 
 function getAddressFromCoordinates(lat, lng) {
-  // Using OpenStreetMap Nominatim for reverse geocoding (free service)
   fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=18&addressdetails=1`)
     .then(response => response.json())
     .then(data => {
@@ -276,7 +261,6 @@ function getAddressFromCoordinates(lat, lng) {
         const address = data.display_name;
         currentLocation.address = address;
         
-        // Update location status with address
         if (locationStatus) {
           locationStatus.textContent = `Location: ${address.split(',').slice(0, 3).join(',')}`;
         }
@@ -284,7 +268,6 @@ function getAddressFromCoordinates(lat, lng) {
     })
     .catch(error => {
       console.error("Reverse geocoding error: ", error);
-      // Continue without address - coordinates are sufficient
     });
 }
 
@@ -350,10 +333,8 @@ function recordAttendance(type) {
     return;
   }
 
-  // Don't block attendance if location is not available
   if (!currentLocation) {
     showNotification("Location not available, recording attendance without location...", "info");
-    // Set default location so attendance can be recorded
     currentLocation = {
       latitude: 0,
       longitude: 0,
@@ -385,8 +366,9 @@ function recordAttendance(type) {
   const timestamp = now.getTime();
   const filename = `${currentEmployee.id}_${date}_${type}_${timestamp}.jpg`;
 
+  // FIXED: Check for duplicate attendance with flexible date handling
   if (checkDuplicateAttendance(type)) {
-    showNotification(`${type} has already been recorded today.`, "error");
+    showNotification(`${type} has already been recorded for this attendance session.`, "error");
     return;
   }
 
@@ -396,21 +378,46 @@ function recordAttendance(type) {
     timestamp,
     image: capturedImage,
     filename,
-    attendanceType: attendanceData.type, // Add attendance type (WFH/On-Site)
-    location: currentLocation // Add location data
+    attendanceType: attendanceData.type,
+    location: currentLocation,
+    // NEW: Add session identifier for overtime tracking across days
+    attendanceSession: getCurrentAttendanceSession()
   };
 
   saveAttendanceToFirebase(attendanceRecord);
 }
 
+// NEW: Get current attendance session based on TimeIn
+function getCurrentAttendanceSession() {
+  const records = attendanceData.records || [];
+  const timeInRecord = records.find(r => r.type === 'TimeIn');
+  
+  if (timeInRecord) {
+    // Use the TimeIn date as the session identifier
+    const timeInDate = new Date(timeInRecord.timestamp);
+    return timeInDate.toLocaleDateString('en-US').replace(/\//g, '-');
+  }
+  
+  // If no TimeIn, use current date
+  return new Date().toLocaleDateString('en-US').replace(/\//g, '-');
+}
+
+// FIXED: Check duplicate attendance within the same session
 function checkDuplicateAttendance(type) {
-  const todayRecords = attendanceData.records || [];
-  return todayRecords.some(record => record.type === type);
+  const records = attendanceData.records || [];
+  const currentSession = getCurrentAttendanceSession();
+  
+  return records.some(record => {
+    const recordSession = record.attendanceSession || 
+                         new Date(record.timestamp).toLocaleDateString('en-US').replace(/\//g, '-');
+    return record.type === type && recordSession === currentSession;
+  });
 }
 
 function saveAttendanceToFirebase(record) {
-  const date = new Date().toLocaleDateString('en-US').replace(/\//g, '-');
-  const attendanceRef = ref(database, `attendance/${currentEmployee.id}/${date}/${record.type}`);
+  // FIXED: Use session-based path instead of calendar date
+  const sessionDate = record.attendanceSession;
+  const attendanceRef = ref(database, `attendance/${currentEmployee.id}/${sessionDate}/${record.type}`);
 
   set(attendanceRef, record)
     .then(() => {
@@ -432,38 +439,58 @@ function saveAttendanceToFirebase(record) {
 
 // ========== RECORDS ==========
 function loadAttendanceRecords() {
-  const date = new Date().toLocaleDateString('en-US').replace(/\//g, '-');
-  const attendanceRef = ref(database, `attendance/${currentEmployee.id}/${date}`);
-
-  console.log('Loading records from Firebase...');
+  // FIXED: Load all recent sessions (last 2 days) to handle overnight overtime
+  const today = new Date();
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
   
-  onValue(attendanceRef, (snapshot) => {
-    console.log('Firebase data received:', snapshot.exists());
-    
-    const records = [];
-    if (snapshot.exists()) {
-      snapshot.forEach((childSnapshot) => {
-        records.push(childSnapshot.val());
-      });
-    }
+  const datesToLoad = [
+    today.toLocaleDateString('en-US').replace(/\//g, '-'),
+    yesterday.toLocaleDateString('en-US').replace(/\//g, '-')
+  ];
 
-    attendanceData.records = records;
-    updateAttendanceRecords();
-    updateButtons();
+  console.log('Loading records from Firebase for dates:', datesToLoad);
+  
+  let loadedRecords = [];
+  let loadedCount = 0;
 
-    // ✅ Always remove loading screen once data is loaded (even if no records)
-    console.log('Removing loading screen - Firebase data loaded');
-    loadingScreen.classList.remove('active');
-  }, (error) => {
-    console.error('Firebase error:', error);
-    // ✅ Remove loading screen even on error
-    loadingScreen.classList.remove('active');
-    showNotification("Error loading attendance records", "error");
+  datesToLoad.forEach(date => {
+    const attendanceRef = ref(database, `attendance/${currentEmployee.id}/${date}`);
     
-    // Initialize empty records if Firebase fails
-    attendanceData.records = [];
-    updateAttendanceRecords();
-    updateButtons();
+    onValue(attendanceRef, (snapshot) => {
+      console.log(`Firebase data received for ${date}:`, snapshot.exists());
+      
+      if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+          loadedRecords.push(childSnapshot.val());
+        });
+      }
+
+      loadedCount++;
+      
+      // When all dates are loaded
+      if (loadedCount === datesToLoad.length) {
+        // Sort records by timestamp
+        loadedRecords.sort((a, b) => a.timestamp - b.timestamp);
+        
+        attendanceData.records = loadedRecords;
+        updateAttendanceRecords();
+        updateButtons();
+
+        console.log('Removing loading screen - Firebase data loaded');
+        loadingScreen.classList.remove('active');
+      }
+    }, (error) => {
+      console.error(`Firebase error for date ${date}:`, error);
+      loadedCount++;
+      
+      if (loadedCount === datesToLoad.length) {
+        attendanceData.records = loadedRecords;
+        updateAttendanceRecords();
+        updateButtons();
+        loadingScreen.classList.remove('active');
+      }
+    });
   });
 }
 
@@ -472,7 +499,7 @@ function updateAttendanceRecords() {
   if (records.length === 0) {
     attendanceRecords.innerHTML = `
       <tr>
-        <td colspan="5" class="no-records">No attendance records for today</td>
+        <td colspan="5" class="no-records">No attendance records found</td>
       </tr>
     `;
     return;
@@ -480,7 +507,9 @@ function updateAttendanceRecords() {
 
   attendanceRecords.innerHTML = '';
   records.forEach(record => {
-    // UPDATED: Use address if available, otherwise coordinates, otherwise 'No location'
+    const recordDate = new Date(record.timestamp);
+    const displayDate = recordDate.toLocaleDateString('en-US') + ' ' + recordDate.toLocaleTimeString('en-US');
+    
     let locationInfo = 'No location';
     
     if (record.location) {
@@ -488,21 +517,18 @@ function updateAttendanceRecords() {
           record.location.address !== "Location unavailable" && 
           record.location.address !== "Location access denied" &&
           record.location.address !== "Location initializing...") {
-        // Use the address from location
         locationInfo = record.location.address;
       } else if (record.location.latitude && record.location.longitude) {
-        // Fallback to coordinates if no address
         locationInfo = `${record.location.latitude.toFixed(4)}, ${record.location.longitude.toFixed(4)}`;
       }
     }
     
-    // Shorten the address for display if it's too long
     const displayLocation = shortenAddress(locationInfo);
     
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>${record.type}</td>
-      <td>${record.time}</td>
+      <td>${displayDate}</td>
       <td>${record.attendanceType || 'On-Site'}</td>
       <td title="${locationInfo}">${displayLocation}</td>
       <td>
@@ -518,7 +544,6 @@ function updateAttendanceRecords() {
     attendanceRecords.appendChild(row);
   });
 
-  // Add event listeners for view buttons
   document.querySelectorAll('.view-image-btn').forEach(btn => {
     btn.addEventListener('click', (e) => {
       const imageData = e.currentTarget.dataset.image;
@@ -536,20 +561,16 @@ function updateAttendanceRecords() {
   });
 }
 
-// Helper function to shorten long addresses for display
 function shortenAddress(fullAddress) {
   if (!fullAddress || fullAddress === 'No location') return fullAddress;
   
-  // If it's coordinates, return as is
   if (fullAddress.includes(',') && !isNaN(parseFloat(fullAddress.split(',')[0]))) {
     return fullAddress;
   }
   
-  // If address is too long, shorten it
   if (fullAddress.length > 35) {
     const parts = fullAddress.split(',');
     if (parts.length >= 2) {
-      // Take first two parts (usually street + city/area)
       return parts.slice(0, 2).join(', ').substring(0, 40) + '...';
     } else {
       return fullAddress.substring(0, 40) + '...';
@@ -595,14 +616,24 @@ function viewLocationOnMap(lat, lng, address) {
 // ========== BUTTON STATES & OT ==========
 function updateButtons() {
   const records = attendanceData.records || [];
-  const hasTI = records.some(r => r.type === 'TimeIn');
-  const hasTO = records.some(r => r.type === 'TimeOut');
-  const hasOTI = records.some(r => r.type === 'Overtime-TimeIn');
-  const hasOTO = records.some(r => r.type === 'Overtime-TimeOut');
+  const currentSession = getCurrentAttendanceSession();
+  
+  // Filter records for current session only
+  const sessionRecords = records.filter(record => {
+    const recordSession = record.attendanceSession || 
+                         new Date(record.timestamp).toLocaleDateString('en-US').replace(/\//g, '-');
+    return recordSession === currentSession;
+  });
+  
+  const hasTI = sessionRecords.some(r => r.type === 'TimeIn');
+  const hasTO = sessionRecords.some(r => r.type === 'TimeOut');
+  const hasOTI = sessionRecords.some(r => r.type === 'Overtime-TimeIn');
+  const hasOTO = sessionRecords.some(r => r.type === 'Overtime-TimeOut');
 
   let hoursWorked = 0;
   if (hasTI) {
-    const ti = records.find(r => r.type === 'TimeIn').timestamp;
+    const tiRecord = sessionRecords.find(r => r.type === 'TimeIn');
+    const ti = tiRecord.timestamp;
     hoursWorked = (Date.now() - ti) / (1000 * 60 * 60);
   }
 
@@ -618,11 +649,11 @@ function updateButtons() {
   // Show overtime info
   if (hasTI) {
     const nineHoursMs = 9 * 60 * 60 * 1000;
-    const tiTime = records.find(r => r.type === 'TimeIn').timestamp;
+    const tiTime = sessionRecords.find(r => r.type === 'TimeIn').timestamp;
     const now = Date.now();
 
     if (hasTO) {
-      const workedMs = records.find(r => r.type === 'TimeOut').timestamp - tiTime;
+      const workedMs = sessionRecords.find(r => r.type === 'TimeOut').timestamp - tiTime;
       if (workedMs < nineHoursMs) {
         overtimeNotice.textContent = "Your attendance is not eligible for OT.";
         overtimeSection.classList.remove('active');
@@ -678,14 +709,13 @@ function updateDateTime() {
   datetime.textContent = now.toLocaleDateString('en-US', options);
   currentDate = now.toLocaleDateString('en-US').replace(/\//g, '-');
 
-  updateButtons(); // live OT check
+  updateButtons();
 }
 
 // ========== NOTIFICATION ==========
 function showNotification(message, type = 'success') {
   notificationText.textContent = message;
   
-  // Set different colors based on type
   if (type === 'error') {
     notification.style.backgroundColor = '#f44336';
   } else if (type === 'info') {
@@ -701,5 +731,4 @@ function showNotification(message, type = 'success') {
 }
 
 // ========== CLEANUP ==========
-// Stop location tracking when leaving the page
 window.addEventListener('beforeunload', stopLocationTracking);
